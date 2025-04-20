@@ -1,7 +1,7 @@
 [project]
-name = "courseapi"
+name = "simle-file-browser"
 version = "0.1.0"
-description = "Add your description here"
+description = "single file, file browser for server"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
