@@ -7,9 +7,9 @@ from typing import List
 
 import aiofiles
 import humanize
-from fastapi import Depends, FastAPI, File, HTTPException, Response, UploadFile
+from fastapi import FastAPI, File, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.security import HTTPBasic
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
