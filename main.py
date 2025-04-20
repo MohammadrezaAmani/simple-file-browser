@@ -1,16 +1,17 @@
-from fastapi import FastAPI, HTTPException, Response, Depends, UploadFile, File
-from fastapi.responses import FileResponse, StreamingResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from pydantic import BaseModel
-import os
+import asyncio
+import logging
 import mimetypes
+import os
+from pathlib import Path
+from typing import List
+
 import aiofiles
 import humanize
-from pathlib import Path
-import asyncio
-from typing import List
-import logging
+from fastapi import Depends, FastAPI, File, HTTPException, Response, UploadFile
+from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -33,11 +34,13 @@ class FileInfo(BaseModel):
     size_bytes: int
     mime_type: str | None
 
+
 class DirectoryResponse(BaseModel):
     current_path: str
     files: List[FileInfo]
     parent_path: str | None
     breadcrumbs: List[dict]
+
 
 def get_file_info(file_path: Path) -> FileInfo:
     """Get information about a file or directory with improved mime type detection."""
@@ -48,36 +51,37 @@ def get_file_info(file_path: Path) -> FileInfo:
     if not mime_type and not is_dir:
         extension = file_path.suffix.lower()
         mime_map = {
-            '.txt': 'text/plain',
-            '.log': 'text/plain',
-            '.conf': 'text/plain',
-            '.sh': 'text/x-shellscript',
-            '.bashrc': 'text/plain',
-            '.profile': 'text/plain',
-            '.pdf': 'application/pdf',
-            '.json': 'application/json',
-            '.xml': 'application/xml',
-            '.html': 'text/html',
-            '.css': 'text/css',
-            '.js': 'application/javascript',
-            '.mp4': 'video/mp4',
-            '.mkv': 'video/x-matroska',
-            '.avi': 'video/x-msvideo',
-            '.mov': 'video/quicktime',
-            '.webm': 'video/webm',
-            '.mp3': 'audio/mpeg',
-            '.wav': 'audio/wav',
-            '.ogg': 'audio/ogg'
+            ".txt": "text/plain",
+            ".log": "text/plain",
+            ".conf": "text/plain",
+            ".sh": "text/x-shellscript",
+            ".bashrc": "text/plain",
+            ".profile": "text/plain",
+            ".pdf": "application/pdf",
+            ".json": "application/json",
+            ".xml": "application/xml",
+            ".html": "text/html",
+            ".css": "text/css",
+            ".js": "application/javascript",
+            ".mp4": "video/mp4",
+            ".mkv": "video/x-matroska",
+            ".avi": "video/x-msvideo",
+            ".mov": "video/quicktime",
+            ".webm": "video/webm",
+            ".mp3": "audio/mpeg",
+            ".wav": "audio/wav",
+            ".ogg": "audio/ogg",
         }
-        mime_type = mime_map.get(extension, 'application/octet-stream')
+        mime_type = mime_map.get(extension, "application/octet-stream")
     return FileInfo(
         name=file_path.name,
         path=str(file_path),
         is_dir=is_dir,
         size=humanize.naturalsize(size_bytes),
         size_bytes=size_bytes,
-        mime_type=mime_type
+        mime_type=mime_type,
     )
+
 
 def get_breadcrumbs(full_path: Path) -> List[dict]:
     """Generate breadcrumbs for navigation."""
@@ -89,15 +93,17 @@ def get_breadcrumbs(full_path: Path) -> List[dict]:
         breadcrumbs.append({"name": part, "path": current_path})
     return breadcrumbs
 
+
 async def async_iterate_file_chunks(file_path: str, start: int = 0, chunk_size: int = 1024 * 1024):
     """Asynchronously iterate over file chunks for streaming."""
-    async with aiofiles.open(file_path, 'rb') as f:
+    async with aiofiles.open(file_path, "rb") as f:
         await f.seek(start)
         while True:
             chunk = await f.read(chunk_size)
             if not chunk:
                 break
             yield chunk
+
 
 def get_range_header(range_header: str, file_size: int) -> tuple[int, int, bool]:
     """Parse Range header for partial content streaming."""
@@ -111,6 +117,7 @@ def get_range_header(range_header: str, file_size: int) -> tuple[int, int, bool]
         return start, end, True
     except Exception:
         return 0, file_size - 1, False
+
 
 @app.get("/api/list/{path:path}", response_model=DirectoryResponse)
 async def list_directory(path: str = ""):
@@ -133,11 +140,12 @@ async def list_directory(path: str = ""):
             current_path=str(full_path),
             files=sorted(files, key=lambda x: (not x.is_dir, x.name.lower())),
             parent_path=parent_path,
-            breadcrumbs=get_breadcrumbs(full_path)
+            breadcrumbs=get_breadcrumbs(full_path),
         )
     except Exception as e:
         logger.error(f"Error listing directory {path}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/view/{path:path}")
 async def view_file(path: str, range: str | None = None):
@@ -169,13 +177,14 @@ async def view_file(path: str, range: str | None = None):
         return StreamingResponse(
             async_iterate_file_chunks(str(full_path), start),
             status_code=status_code,
-            headers=headers
+            headers=headers,
         )
     except HTTPException as e:
         raise e
     except Exception as e:
         logger.error(f"Error streaming file {path}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/download/{path:path}")
 async def download_file(path: str):
@@ -190,11 +199,12 @@ async def download_file(path: str):
         return FileResponse(
             path=str(full_path),
             filename=full_path.name,
-            media_type=mimetypes.guess_type(full_path)[0] or "application/octet-stream"
+            media_type=mimetypes.guess_type(full_path)[0] or "application/octet-stream",
         )
     except Exception as e:
         logger.error(f"Error downloading file {path}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/upload/{path:path}")
 async def upload_file(path: str, file: UploadFile = File(...)):
@@ -207,7 +217,7 @@ async def upload_file(path: str, file: UploadFile = File(...)):
             raise HTTPException(status_code=400, detail="Invalid directory")
 
         file_path = full_path / file.filename
-        async with aiofiles.open(file_path, 'wb') as f:
+        async with aiofiles.open(file_path, "wb") as f:
             while content := await file.read(1024 * 1024):  # 1MB chunks
                 await f.write(content)
 
@@ -216,10 +226,12 @@ async def upload_file(path: str, file: UploadFile = File(...)):
         logger.error(f"Error uploading file to {path}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.get("/{path:path}")
 async def serve_frontend(path: str = ""):
     """Serve the HTML frontend with support for direct URL navigation."""
-    return Response(content=f"""
+    return Response(
+        content=f"""
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
@@ -615,4 +627,6 @@ async def serve_frontend(path: str = ""):
     </template>
 </body>
 </html>
-""", media_type="text/html")
+""",
+        media_type="text/html",
+    )
